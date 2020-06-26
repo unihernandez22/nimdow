@@ -430,21 +430,6 @@ proc errorHandler(display: PDisplay, error: PXErrorEvent): cint{.cdecl.} =
   errorMessage.setLen(errorMessage.cstring.len)
   echo "\t", errorMessage
 
-proc configure(this: WindowManager, client: Client) =
-  var event: XConfigureEvent
-  event.theType = ConfigureNotify
-  event.display = this.display
-  event.event = client.window
-  event.window = client.window
-  event.x = client.x
-  event.y = client.y
-  event.width = client.width.cint
-  event.height = client.height.cint
-  event.border_width = client.borderWidth.cint
-  event.above = None
-  event.override_redirect = false
-  discard XSendEvent(this.display, client.window, false, StructureNotifyMask, cast[PXEvent](event.addr))
-
 proc onConfigureRequest(this: WindowManager, e: XConfigureRequestEvent) =
   var clientOpt: Option[Client]
   var monitorOpt: Option[Monitor]
@@ -477,7 +462,7 @@ proc onConfigureRequest(this: WindowManager, e: XConfigureRequestEvent) =
           client.y = monitor.area.y + (monitor.area.height.int div 2 - (client.height.int div 2))
 
       if (e.value_mask and (CWX or CWY)) != 0 and (e.value_mask and (CWWidth and CWHeight)) == 0:
-        this.configure(client)
+        client.configure(this.display)
         discard XMoveResizeWindow(
           this.display,
           e.window,
@@ -488,7 +473,7 @@ proc onConfigureRequest(this: WindowManager, e: XConfigureRequestEvent) =
         )
       this.selectedMonitor.doLayout()
     else:
-      this.configure(client)
+      client.configure(this.display)
   else: 
     # TODO: Handle xembed windows: https://specifications.freedesktop.org/xembed-spec/xembed-spec-latest.html
     var changes: XWindowChanges
@@ -579,8 +564,6 @@ proc manage(this: WindowManager, window: Window, windowAttr: XWindowAttributes) 
 
   discard XSetWindowBorder(this.display, window, this.windowSettings.borderColorUnfocused)
   
-  this.configure(client)
-
   discard XSelectInput(this.display,
                        window,
                        StructureNotifyMask or
@@ -594,12 +577,14 @@ proc manage(this: WindowManager, window: Window, windowAttr: XWindowAttributes) 
   this.updateWindowType(client)
   this.updateSizeHints(client)
 
-  discard XMoveResizeWindow(this.display,
-                            window,
-                            client.x,
-                            client.y,
-                            client.width.cuint,
-                            client.height.cuint)
+  client.configure(this.display)
+
+#   discard XMoveResizeWindow(this.display,
+#                             window,
+#                             client.x,
+#                             client.y,
+#                             client.width.cuint,
+#                             client.height.cuint)
 
   this.selectedMonitor.doLayout()
   discard XMapWindow(this.display, window)

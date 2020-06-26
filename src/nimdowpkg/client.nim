@@ -3,6 +3,8 @@ import
   hashes,
   area
 
+converter boolToXBool(x: bool): XBool = x.XBool
+
 type
   Client* = ref object of RootObj
     window*: Window
@@ -26,18 +28,23 @@ proc hash*(this: Client): Hash
 proc newClient*(window: Window): Client =
   Client(window: window)
 
+proc configure*(this: Client, display: PDisplay) =
+  var event: XConfigureEvent
+  event.theType = ConfigureNotify
+  event.display = display
+  event.event = this.window
+  event.window = this.window
+  event.x = this.x.cint
+  event.y = this.y.cint
+  event.width = this.width.cint
+  event.height = this.height.cint
+  event.border_width = this.borderWidth.cint
+  event.above = None
+  event.override_redirect = false
+  discard XSendEvent(display, this.window, false, StructureNotifyMask, cast[PXEvent](event.addr))
+
 proc adjustToState*(this: Client, display: PDisplay) =
   ## Changes the client's location, size, and border based on the client's internal state.
-  discard XMoveResizeWindow(
-    display,
-    this.window,
-    this.x.cint,
-    this.y.cint,
-    this.width.cuint,
-    this.height.cuint
-  )
-  discard XSetWindowBorderWidth(display, this.window, this.borderWidth.cuint)
-
   var windowChanges: XWindowChanges
   windowChanges.x = this.x.cint
   windowChanges.y = this.y.cint
@@ -50,6 +57,7 @@ proc adjustToState*(this: Client, display: PDisplay) =
     CWX or CWY or CWWidth or CWHeight or CWBorderWidth,
     windowChanges.addr
   )
+  this.configure(display)
 
 proc isNormal*(this: Client): bool =
   ## If the client is "normal".
