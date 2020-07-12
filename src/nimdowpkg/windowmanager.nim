@@ -753,6 +753,22 @@ proc onEnterNotify(this: WindowManager, e: XCrossingEvent) =
   if clientIndex >= 0:
     discard XSetInputFocus(this.display, e.window, RevertToPointerRoot, CurrentTime)
 
+proc moveClientBetweenMonitors(
+  this: WindowManager,
+  client: Client,
+  monitorSource,
+  monitorDest: Monitor
+) =
+  # Moves a client between monitors (in data, only),
+  if monitorSource.removeWindow(client.window):
+    monitorSource.doLayout()
+    monitorSource.ensureWindowFocus()
+    monitorSource.redrawStatusBar()
+
+  monitorDest.currTagClients.add(client)
+  monitorDest.focusClient(client)
+  monitorDest.redrawStatusBar()
+
 proc onFocusIn(this: WindowManager, e: XFocusChangeEvent) =
   if this.mouseState != Normal or e.detail == NotifyPointer or e.window == this.rootWindow:
     if this.selectedMonitor.currClient.isNone:
@@ -760,7 +776,14 @@ proc onFocusIn(this: WindowManager, e: XFocusChangeEvent) =
       this.selectedMonitor.statusBar.setActiveWindowTitle("")
     return
 
-  let clientOpt = this.selectedMonitor.find(e.window)
+  var clientOpt: Option[Client]
+  for monitor in this.monitors:
+    clientOpt = monitor.find(e.window)
+    withSome(clientOpt, client):
+      if monitor != this.selectedMonitor:
+        this.moveClientBetweenMonitors(client, monitor, this.selectedMonitor)
+      break
+
   if clientOpt.isNone:
     return
 
